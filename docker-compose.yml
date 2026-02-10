@@ -1,0 +1,33 @@
+# docker compose up
+services:
+  db:
+    image: postgres:16
+    container_name: eco_db
+    environment:
+      POSTGRES_DB : eco
+      POSTGRES_USER : eco
+      POSTGRES_PASSWORD : eco
+    ports:
+      - "5432:5432"
+    volumes:
+      - eco_pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eco -d eco"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  api:
+    build: .
+    container_name: eco_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postrgres://eco:eco@db:5432/eco?sslmode=disable
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+volumes:
+  eco_pgdata:
+
