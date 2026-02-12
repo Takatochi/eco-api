@@ -1,12 +1,11 @@
-# docker compose up
 services:
   db:
     image: postgres:16
     container_name: eco_db
     environment:
-      POSTGRES_DB : eco
-      POSTGRES_USER : eco
-      POSTGRES_PASSWORD : eco
+      POSTGRES_DB: eco
+      POSTGRES_USER: eco
+      POSTGRES_PASSWORD: eco
     ports:
       - "5432:5432"
     volumes:
@@ -17,6 +16,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+  pg_admin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "user@domain.com"
+      PGADMIN_DEFAULT_PASSWORD: "1234"
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
   api:
     build: .
     container_name: eco_api
@@ -24,10 +32,54 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postrgres://eco:eco@db:5432/eco?sslmode=disable
+      DATABASE_URL: postgres://eco:eco@db:5432/eco?sslmode=disable
       PORT: "8080"
     ports:
       - "8080:8080"
+
+  sensor-1:
+    image: api-sensor:latest
+    #    build: ./simulator
+    container_name: sensor-1
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:8080/api/measurements
+      DEVICE_ID: sensor-1
+      INTERVAL_SEC: "2"
+
+  sensor-2:
+    image: api-sensor:latest
+    #    build: ./simulator
+    container_name: sensor-2
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:8080/api/measurements
+      DEVICE_ID: sensor-2
+      INTERVAL_SEC: "1"
+
+  sensor-3:
+    image: api-sensor:latest
+    #    build: ./simulator
+    container_name: sensor-3
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:8080/api/measurements
+      DEVICE_ID: sensor-3
+      INTERVAL_SEC: "5"
+
+  sensor-4:
+    image: api-sensor:latest
+    #    build: ./simulator
+    container_name: sensor-4
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:8080/api/measurements
+      DEVICE_ID: sensor-4
+      INTERVAL_SEC: "3"
+
 volumes:
   eco_pgdata:
-

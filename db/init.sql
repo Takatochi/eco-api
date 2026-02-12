@@ -1,12 +1,18 @@
-CREATE TABLE IF NOT EXISTS measurements(
-    id SERIAL primary key,//
-    divice_id text not null,
-    ts timestamptz not null,
-    temparature double precision
+
+DROP TABLE IF EXISTS measurements;
+
+CREATE TABLE IF NOT EXISTS measurements (
+    id BIGSERIAL PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    ts TIMESTAMPTZ NOT NULL,
+    temperature DOUBLE PRECISION,
+    ph DOUBLE PRECISION,
+    turbidity DOUBLE PRECISION,
+    conductivity DOUBLE PRECISION
 );
-create index IF NOT EXISTS
-    idx_measurements_device_ts on
-        measurements(divice_id, ts desc);
-create unique index IF NOT EXISTS
-    uq_measurements_device_ts on
-        measurements(divice_id, ts);
+
+CREATE INDEX IF NOT EXISTS idx_measurements_device_ts
+    ON measurements(device_id, ts DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_measurements_device_ts
+    ON measurements(device_id, ts);
