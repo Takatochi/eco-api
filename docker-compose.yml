@@ -16,6 +16,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
   pg_admin:
     image: dpage/pgadmin4
     environment:
@@ -25,6 +26,16 @@ services:
       - "5050:80"
     depends_on:
       - db
+
+  # Optional local blockchain (for section 3 demonstration):
+  # 1) Deploy blockchain/contracts/DataAnchor.sol to this node.
+  # 2) Put deployed address into BLOCKCHAIN_CONTRACT_ADDRESS for api service.
+  blockchain:
+    image: trufflesuite/ganache:v7.9.1
+    container_name: eco_blockchain
+    command: --wallet.totalAccounts 5 --wallet.defaultBalance 1000 --chain.chainId 1337 --server.host 0.0.0.0
+    ports:
+      - "8545:8545"
   api:
     build: .
     container_name: eco_api
@@ -34,12 +45,14 @@ services:
     environment:
       DATABASE_URL: postgres://eco:eco@db:5432/eco?sslmode=disable
       PORT: "8080"
+      BLOCKCHAIN_RPC_URL: ${BLOCKCHAIN_RPC_URL:-}
+      BLOCKCHAIN_CONTRACT_ADDRESS: ${BLOCKCHAIN_CONTRACT_ADDRESS:-}
+      BLOCKCHAIN_FROM_ADDRESS: ${BLOCKCHAIN_FROM_ADDRESS:-}
     ports:
       - "8080:8080"
 
   sensor-1:
-    image: api-sensor:latest
-    #    build: ./simulator
+    build: ./simulator
     container_name: sensor-1
     depends_on:
       - api
@@ -47,10 +60,10 @@ services:
       API_URL: http://api:8080/api/measurements
       DEVICE_ID: sensor-1
       INTERVAL_SEC: "2"
+      WORKERS: "1"
 
   sensor-2:
-    image: api-sensor:latest
-    #    build: ./simulator
+    build: ./simulator
     container_name: sensor-2
     depends_on:
       - api
@@ -58,10 +71,10 @@ services:
       API_URL: http://api:8080/api/measurements
       DEVICE_ID: sensor-2
       INTERVAL_SEC: "1"
+      WORKERS: "1"
 
   sensor-3:
-    image: api-sensor:latest
-    #    build: ./simulator
+    build: ./simulator
     container_name: sensor-3
     depends_on:
       - api
@@ -69,10 +82,10 @@ services:
       API_URL: http://api:8080/api/measurements
       DEVICE_ID: sensor-3
       INTERVAL_SEC: "5"
+      WORKERS: "1"
 
   sensor-4:
-    image: api-sensor:latest
-    #    build: ./simulator
+    build: ./simulator
     container_name: sensor-4
     depends_on:
       - api
@@ -80,6 +93,8 @@ services:
       API_URL: http://api:8080/api/measurements
       DEVICE_ID: sensor-4
       INTERVAL_SEC: "3"
+      WORKERS: "1"
 
 volumes:
   eco_pgdata:
+  blockscout_pg:

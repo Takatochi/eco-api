@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -10,17 +14,22 @@ import (
 	"eco-api/internal/repository"
 )
 
+type MeasurementAnchor interface {
+	Anchor(ctx context.Context, dataHashHex string) (txHash string, blockNumber uint64, err error)
+}
+
 type MeasurementService interface {
 	Create(ctx context.Context, in model.MeasurementIn) (int64, error)
 	List(ctx context.Context, deviceID, fromStr, toStr, limitStr string) ([]model.MeasurementOut, error)
 }
 
 type measurementService struct {
-	repo repository.MeasurementRepository
+	repo   repository.MeasurementRepository
+	anchor MeasurementAnchor
 }
 
-func NewMeasurementService(repo repository.MeasurementRepository) MeasurementService {
-	return &measurementService{repo: repo}
+func NewMeasurementService(repo repository.MeasurementRepository, anchor MeasurementAnchor) MeasurementService {
+	return &measurementService{repo: repo, anchor: anchor}
 }
 
 func (s *measurementService) Create(ctx context.Context, in model.MeasurementIn) (int64, error) {
@@ -29,7 +38,27 @@ func (s *measurementService) Create(ctx context.Context, in model.MeasurementIn)
 		return 0, err
 	}
 
-	return s.repo.Create(ctx, in, ts)
+	dataHash := measurementDataHash(in, ts)
+	id, err := s.repo.Create(ctx, in, ts, dataHash)
+	if err != nil {
+		return 0, err
+	}
+
+	if s.anchor == nil {
+		return id, nil
+	}
+
+	txHash, blockNumber, err := s.anchor.Anchor(ctx, dataHash)
+	if err != nil {
+		log.Printf("blockchain anchor failed for id=%d hash=%s: %v", id, dataHash, err)
+		return id, nil
+	}
+
+	if err := s.repo.SetAnchorInfo(ctx, id, txHash, blockNumber); err != nil {
+		log.Printf("persist blockchain anchor failed for id=%d tx=%s: %v", id, txHash, err)
+	}
+
+	return id, nil
 }
 
 func (s *measurementService) List(ctx context.Context, deviceID, fromStr, toStr, limitStr string) ([]model.MeasurementOut, error) {
@@ -68,13 +97,16 @@ func (s *measurementService) List(ctx context.Context, deviceID, fromStr, toStr,
 	out := make([]model.MeasurementOut, 0, len(records))
 	for _, r := range records {
 		out = append(out, model.MeasurementOut{
-			ID:           r.ID,
-			DeviceID:     r.DeviceID,
-			Timestamp:    r.Timestamp.UTC().Format(time.RFC3339),
-			Temperature:  r.Temperature,
-			PH:           r.PH,
-			Turbidity:    r.Turbidity,
-			Conductivity: r.Conductivity,
+			ID:                r.ID,
+			DeviceID:          r.DeviceID,
+			Timestamp:         r.Timestamp.UTC().Format(time.RFC3339),
+			Temperature:       r.Temperature,
+			PH:                r.PH,
+			Turbidity:         r.Turbidity,
+			Conductivity:      r.Conductivity,
+			DataHash:          r.DataHash,
+			AnchorTxHash:      r.AnchorTxHash,
+			AnchorBlockNumber: r.AnchorBlockNumber,
 		})
 	}
 
@@ -104,4 +136,25 @@ func validateAndParse(in model.MeasurementIn) (time.Time, error) {
 	}
 
 	return ts, nil
+}
+
+func measurementDataHash(in model.MeasurementIn, ts time.Time) string {
+	payload := fmt.Sprintf(
+		"deviceId=%s|timestamp=%s|temperature=%s|ph=%s|turbidity=%s|conductivity=%s",
+		in.DeviceID,
+		ts.UTC().Format(time.RFC3339Nano),
+		numberOrNil(in.Temperature),
+		numberOrNil(in.PH),
+		numberOrNil(in.Turbidity),
+		numberOrNil(in.Conductivity),
+	)
+	digest := sha256.Sum256([]byte(payload))
+	return "0x" + hex.EncodeToString(digest[:])
+}
+
+func numberOrNil(v *float64) string {
+	if v == nil {
+		return "nil"
+	}
+	return strconv.FormatFloat(*v, 'f', -1, 64)
 }

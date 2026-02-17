@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"eco-api/internal/blockchain"
 	"eco-api/internal/config"
 	"eco-api/internal/handler"
 	"eco-api/internal/repository"
@@ -29,8 +30,21 @@ func main() {
 	}
 	defer pool.Close()
 
+	var anchor service.MeasurementAnchor
+	if cfg.BlockchainRPCURL != "" && cfg.BlockchainContractAddr != "" && cfg.BlockchainFromAddr != "" {
+		a, err := blockchain.NewAnchor(cfg.BlockchainRPCURL, cfg.BlockchainContractAddr, cfg.BlockchainFromAddr)
+		if err != nil {
+			log.Printf("blockchain disabled: %v", err)
+		} else {
+			anchor = a
+			log.Printf("blockchain anchor enabled: contract=%s", cfg.BlockchainContractAddr)
+		}
+	} else {
+		log.Printf("blockchain anchor disabled: set BLOCKCHAIN_RPC_URL, BLOCKCHAIN_CONTRACT_ADDRESS, BLOCKCHAIN_FROM_ADDRESS")
+	}
+
 	measurementRepo := repository.NewMeasurementRepository(pool)
-	measurementService := service.NewMeasurementService(measurementRepo)
+	measurementService := service.NewMeasurementService(measurementRepo, anchor)
 	h := handler.New(measurementService, pool)
 	engine := router.New(h)
 

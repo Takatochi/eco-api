@@ -6,14 +6,20 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string
-	Port        string
+	DatabaseURL            string
+	Port                   string
+	BlockchainRPCURL       string
+	BlockchainContractAddr string
+	BlockchainFromAddr     string
 }
 
 func Load() Config {
 	return Config{
-		DatabaseURL: mustEnv("DATABASE_URL"),
-		Port:        envOr("PORT", "8080"),
+		DatabaseURL:            mustEnv("DATABASE_URL"),
+		Port:                   envOr("PORT", "8080"),
+		BlockchainRPCURL:       os.Getenv("BLOCKCHAIN_RPC_URL"),
+		BlockchainContractAddr: os.Getenv("BLOCKCHAIN_CONTRACT_ADDRESS"),
+		BlockchainFromAddr:     os.Getenv("BLOCKCHAIN_FROM_ADDRESS"),
 	}
 }
 
