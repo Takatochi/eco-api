@@ -1,0 +1,17 @@
+{
+  "name": "eco-api-blockchain",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:local": "hardhat run scripts/deploy.js --network local",
+    "anchor:demo": "node scripts/anchor-demo.js"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.1.0",
+    "hardhat": "^2.26.3"
+  },
+  "dependencies": {
+    "ethers": "^6.13.2"
+  }
+}
