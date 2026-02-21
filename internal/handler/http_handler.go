@@ -98,7 +98,7 @@ func (h *Handler) ListMeasurements(c *gin.Context) {
 func respondError(c *gin.Context, err error) {
 	switch {
 	case isUniqueViolation(err):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, gin.H{"error": "measurement already exists for this device and timestamp"})
 	case isValidationError(err):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
