@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -44,21 +44,25 @@ func (s *measurementService) Create(ctx context.Context, in model.MeasurementIn)
 		return 0, err
 	}
 
-	if s.anchor == nil {
-		return id, nil
-	}
-
-	txHash, blockNumber, err := s.anchor.Anchor(ctx, dataHash)
-	if err != nil {
-		log.Printf("blockchain anchor failed for id=%d hash=%s: %v", id, dataHash, err)
-		return id, nil
-	}
-
-	if err := s.repo.SetAnchorInfo(ctx, id, txHash, blockNumber); err != nil {
-		log.Printf("persist blockchain anchor failed for id=%d tx=%s: %v", id, txHash, err)
+	if s.anchor != nil {
+		s.tryAnchor(ctx, id, dataHash)
 	}
 
 	return id, nil
+}
+
+// tryAnchor calls the blockchain anchor and persists the result.
+// Failures are logged but never propagate — anchoring is best-effort.
+func (s *measurementService) tryAnchor(ctx context.Context, id int64, dataHash string) {
+	txHash, blockNumber, err := s.anchor.Anchor(ctx, dataHash)
+	if err != nil {
+		slog.Warn("blockchain anchor failed", "id", id, "hash", dataHash, "error", err)
+		return
+	}
+
+	if err := s.repo.SetAnchorInfo(ctx, id, txHash, blockNumber); err != nil {
+		slog.Error("persist blockchain anchor failed", "id", id, "txHash", txHash, "error", err)
+	}
 }
 
 func (s *measurementService) List(ctx context.Context, deviceID, fromStr, toStr, limitStr string) ([]model.MeasurementOut, error) {

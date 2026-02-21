@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -25,7 +25,8 @@ func Load() Config {
 		BlockchainFromAddr:     os.Getenv("BLOCKCHAIN_FROM_ADDRESS"),
 	}
 	if err := cfg.validate(); err != nil {
-		log.Fatalf("config error:\n%v", err)
+		slog.Error("invalid configuration", "details", err.Error())
+		os.Exit(1)
 	}
 	return cfg
 }
@@ -82,7 +83,8 @@ func countNonEmpty(vals ...string) int {
 func mustEnv(key string) string {
 	value := os.Getenv(key)
 	if value == "" {
-		log.Fatalf("missing required env: %s", key)
+		slog.Error("missing required env", "key", key)
+		os.Exit(1)
 	}
 	return value
 }
