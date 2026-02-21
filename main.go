@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
-	"log"
+	"errors"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -19,6 +21,8 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+
 	cfg := config.Load()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -26,21 +30,23 @@ func main() {
 
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("create pg pool: %v", err)
+		slog.Error("create pg pool", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
 	var anchor service.MeasurementAnchor
-	if cfg.BlockchainRPCURL != "" && cfg.BlockchainContractAddr != "" && cfg.BlockchainFromAddr != "" {
+	if cfg.BlockchainRPCURL != "" {
+		// config.validate() guarantees all three vars are present and valid.
 		a, err := blockchain.NewAnchor(cfg.BlockchainRPCURL, cfg.BlockchainContractAddr, cfg.BlockchainFromAddr)
 		if err != nil {
-			log.Printf("blockchain disabled: %v", err)
-		} else {
-			anchor = a
-			log.Printf("blockchain anchor enabled: contract=%s", cfg.BlockchainContractAddr)
+			slog.Error("blockchain init", "error", err)
+			os.Exit(1)
 		}
+		anchor = a
+		slog.Info("blockchain anchor enabled", "contract", cfg.BlockchainContractAddr)
 	} else {
-		log.Printf("blockchain anchor disabled: set BLOCKCHAIN_RPC_URL, BLOCKCHAIN_CONTRACT_ADDRESS, BLOCKCHAIN_FROM_ADDRESS")
+		slog.Info("blockchain anchor disabled")
 	}
 
 	measurementRepo := repository.NewMeasurementRepository(pool)
@@ -59,12 +65,13 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Printf("server shutdown: %v", err)
+			slog.Error("server shutdown", "error", err)
 		}
 	}()
 
-	log.Printf("listening on :%s", cfg.Port)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("listen and serve: %v", err)
+	slog.Info("server starting", "port", cfg.Port)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("listen and serve", "error", err)
+		os.Exit(1)
 	}
 }

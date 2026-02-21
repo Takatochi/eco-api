@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"time"
 
+	"eco-api/internal/apperr"
 	"eco-api/internal/model"
 	"eco-api/internal/repository"
 )
@@ -44,47 +44,51 @@ func (s *measurementService) Create(ctx context.Context, in model.MeasurementIn)
 		return 0, err
 	}
 
-	if s.anchor == nil {
-		return id, nil
-	}
-
-	txHash, blockNumber, err := s.anchor.Anchor(ctx, dataHash)
-	if err != nil {
-		log.Printf("blockchain anchor failed for id=%d hash=%s: %v", id, dataHash, err)
-		return id, nil
-	}
-
-	if err := s.repo.SetAnchorInfo(ctx, id, txHash, blockNumber); err != nil {
-		log.Printf("persist blockchain anchor failed for id=%d tx=%s: %v", id, txHash, err)
+	if s.anchor != nil {
+		s.tryAnchor(ctx, id, dataHash)
 	}
 
 	return id, nil
 }
 
+// tryAnchor calls the blockchain anchor and persists the result.
+// Failures are logged but never propagate — anchoring is best-effort.
+func (s *measurementService) tryAnchor(ctx context.Context, id int64, dataHash string) {
+	txHash, blockNumber, err := s.anchor.Anchor(ctx, dataHash)
+	if err != nil {
+		slog.Warn("blockchain anchor failed", "id", id, "hash", dataHash, "error", err)
+		return
+	}
+
+	if err := s.repo.SetAnchorInfo(ctx, id, txHash, blockNumber); err != nil {
+		slog.Error("persist blockchain anchor failed", "id", id, "txHash", txHash, "error", err)
+	}
+}
+
 func (s *measurementService) List(ctx context.Context, deviceID, fromStr, toStr, limitStr string) ([]model.MeasurementOut, error) {
 	if deviceID == "" || fromStr == "" || toStr == "" {
-		return nil, errors.New("required query params: deviceId, from, to (RFC3339)")
+		return nil, apperr.NewValidation("required query params: deviceId, from, to (RFC3339)")
 	}
 
 	from, err := time.Parse(time.RFC3339, fromStr)
 	if err != nil {
-		return nil, errors.New("invalid from")
+		return nil, apperr.NewValidation("invalid from")
 	}
 
 	to, err := time.Parse(time.RFC3339, toStr)
 	if err != nil {
-		return nil, errors.New("invalid to")
+		return nil, apperr.NewValidation("invalid to")
 	}
 
 	if !to.After(from) {
-		return nil, errors.New("`to` must be after `from`")
+		return nil, apperr.NewValidation("`to` must be after `from`")
 	}
 
 	limit := 500
 	if limitStr != "" {
 		v, err := strconv.Atoi(limitStr)
 		if err != nil || v <= 0 || v > 5000 {
-			return nil, errors.New("limit must be in range [1..5000]")
+			return nil, apperr.NewValidation("limit must be in range [1..5000]")
 		}
 		limit = v
 	}
@@ -115,24 +119,24 @@ func (s *measurementService) List(ctx context.Context, deviceID, fromStr, toStr,
 
 func validateAndParse(in model.MeasurementIn) (time.Time, error) {
 	if in.DeviceID == "" {
-		return time.Time{}, errors.New("deviceId is required")
+		return time.Time{}, apperr.NewValidation("deviceId is required")
 	}
 
 	if in.Timestamp == "" {
-		return time.Time{}, errors.New("timestamp is required (RFC3339)")
+		return time.Time{}, apperr.NewValidation("timestamp is required (RFC3339)")
 	}
 
 	ts, err := time.Parse(time.RFC3339, in.Timestamp)
 	if err != nil {
-		return time.Time{}, errors.New("timestamp must be RFC3339, example: 2026-02-10T10:00:00Z")
+		return time.Time{}, apperr.NewValidation("timestamp must be RFC3339, example: 2026-02-10T10:00:00Z")
 	}
 
 	if in.PH != nil && (*in.PH < 0 || *in.PH > 14) {
-		return time.Time{}, errors.New("ph must be in range [0..14]")
+		return time.Time{}, apperr.NewValidation("ph must be in range [0..14]")
 	}
 
 	if in.Temperature != nil && (*in.Temperature < -50 || *in.Temperature > 80) {
-		return time.Time{}, errors.New("temperature must be in range [-50..80]")
+		return time.Time{}, apperr.NewValidation("temperature must be in range [-50..80]")
 	}
 
 	return ts, nil

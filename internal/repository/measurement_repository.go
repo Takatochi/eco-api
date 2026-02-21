@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"eco-api/internal/model"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,9 +33,8 @@ func (r *measurementRepository) Create(ctx context.Context, in model.Measurement
 		RETURNING id
 	`, in.DeviceID, ts, in.Temperature, in.PH, in.Turbidity, in.Conductivity, dataHash).Scan(&id)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("create measurement: %w", err)
 	}
-
 	return id, nil
 }
 
@@ -43,7 +44,10 @@ func (r *measurementRepository) SetAnchorInfo(ctx context.Context, id int64, txH
 		SET anchor_tx_hash = $2, anchor_block_number = $3
 		WHERE id = $1
 	`, id, txHash, int64(blockNumber))
-	return err
+	if err != nil {
+		return fmt.Errorf("set anchor info id=%d: %w", id, err)
+	}
+	return nil
 }
 
 func (r *measurementRepository) List(ctx context.Context, deviceID string, from, to time.Time, limit int) ([]model.MeasurementRecord, error) {
@@ -55,15 +59,13 @@ func (r *measurementRepository) List(ctx context.Context, deviceID string, from,
 		LIMIT $4
 	`, deviceID, from, to, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list measurements: %w", err)
 	}
-	defer rows.Close()
 
-	out := make([]model.MeasurementRecord, 0, limit)
-	for rows.Next() {
+	records, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (model.MeasurementRecord, error) {
 		var m model.MeasurementRecord
 		var blockNumber *int64
-		if err := rows.Scan(
+		if err := row.Scan(
 			&m.ID,
 			&m.DeviceID,
 			&m.Timestamp,
@@ -75,18 +77,16 @@ func (r *measurementRepository) List(ctx context.Context, deviceID string, from,
 			&m.AnchorTxHash,
 			&blockNumber,
 		); err != nil {
-			return nil, err
+			return m, err
 		}
 		if blockNumber != nil {
 			v := uint64(*blockNumber)
 			m.AnchorBlockNumber = &v
 		}
-		out = append(out, m)
+		return m, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan measurements: %w", err)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return out, nil
+	return records, nil
 }

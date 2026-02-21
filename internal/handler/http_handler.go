@@ -3,10 +3,11 @@ package handler
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
+	"eco-api/internal/apperr"
 	"eco-api/internal/docs"
 	"eco-api/internal/model"
 	"eco-api/internal/service"
@@ -65,14 +66,7 @@ func (h *Handler) CreateMeasurement(c *gin.Context) {
 
 	id, err := h.service.Create(ctx, in)
 	if err != nil {
-		status := http.StatusBadRequest
-		if isUniqueViolation(err) {
-			status = http.StatusConflict
-		}
-		if status == http.StatusBadRequest && !isValidationError(err) {
-			status = http.StatusInternalServerError
-		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
@@ -91,26 +85,35 @@ func (h *Handler) ListMeasurements(c *gin.Context) {
 		c.Query("limit"),
 	)
 	if err != nil {
-		status := http.StatusBadRequest
-		if !isValidationError(err) {
-			status = http.StatusInternalServerError
-		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		respondError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, items)
 }
 
-func isValidationError(err error) bool {
-	if err == nil {
-		return false
+// respondError maps an error to an HTTP response.
+// Validation errors → 400, unique violations → 409, everything else → 500.
+// Internal errors are logged server-side and a generic message is returned to the client.
+func respondError(c *gin.Context, err error) {
+	switch {
+	case isUniqueViolation(err):
+		c.JSON(http.StatusConflict, gin.H{"error": "measurement already exists for this device and timestamp"})
+	case isValidationError(err):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	default:
+		slog.Error("internal error",
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"error", err,
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "required") ||
-		strings.Contains(msg, "invalid") ||
-		strings.Contains(msg, "must be") ||
-		strings.Contains(msg, "range")
+}
+
+func isValidationError(err error) bool {
+	var ve *apperr.ValidationError
+	return errors.As(err, &ve)
 }
 
 func isUniqueViolation(err error) bool {
