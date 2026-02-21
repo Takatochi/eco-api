@@ -1,4 +1,4 @@
-.PHONY: demo-up demo-down run fmt lint tidy test blockchain-install blockchain-deploy
+.PHONY: demo-up demo-down run run-docker run-down fmt lint tidy test blockchain-install blockchain-deploy
 
 demo-up:
 	docker compose up -d --build
@@ -7,7 +7,13 @@ demo-down:
 	docker compose down -v
 
 run:
-	go run .
+	./scripts/run.sh
+
+run-docker:
+	./scripts/run.sh --docker
+
+run-down:
+	./scripts/run.sh --down
 
 fmt:
 	gofmt -w .
