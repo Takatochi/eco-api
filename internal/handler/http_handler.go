@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
+	"eco-api/internal/apperr"
 	"eco-api/internal/docs"
 	"eco-api/internal/model"
 	"eco-api/internal/service"
@@ -103,14 +103,8 @@ func (h *Handler) ListMeasurements(c *gin.Context) {
 }
 
 func isValidationError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "required") ||
-		strings.Contains(msg, "invalid") ||
-		strings.Contains(msg, "must be") ||
-		strings.Contains(msg, "range")
+	var ve *apperr.ValidationError
+	return errors.As(err, &ve)
 }
 
 func isUniqueViolation(err error) bool {

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"eco-api/internal/apperr"
 	"eco-api/internal/model"
 
 	"github.com/gin-gonic/gin"
@@ -127,7 +128,7 @@ func TestListMeasurements(t *testing.T) {
 	h := New(&serviceMock{
 		listFn: func(ctx context.Context, deviceID, fromStr, toStr, limitStr string) ([]model.MeasurementOut, error) {
 			if deviceID == "" {
-				return nil, errors.New("required query params: deviceId, from, to (RFC3339)")
+				return nil, apperr.NewValidation("required query params: deviceId, from, to (RFC3339)")
 			}
 			return []model.MeasurementOut{{ID: 1, DeviceID: deviceID, Timestamp: "2026-02-10T10:00:00Z"}}, nil
 		},

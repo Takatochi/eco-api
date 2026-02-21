@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"log"
 	"strconv"
 	"time"
 
+	"eco-api/internal/apperr"
 	"eco-api/internal/model"
 	"eco-api/internal/repository"
 )
@@ -63,28 +63,28 @@ func (s *measurementService) Create(ctx context.Context, in model.MeasurementIn)
 
 func (s *measurementService) List(ctx context.Context, deviceID, fromStr, toStr, limitStr string) ([]model.MeasurementOut, error) {
 	if deviceID == "" || fromStr == "" || toStr == "" {
-		return nil, errors.New("required query params: deviceId, from, to (RFC3339)")
+		return nil, apperr.NewValidation("required query params: deviceId, from, to (RFC3339)")
 	}
 
 	from, err := time.Parse(time.RFC3339, fromStr)
 	if err != nil {
-		return nil, errors.New("invalid from")
+		return nil, apperr.NewValidation("invalid from")
 	}
 
 	to, err := time.Parse(time.RFC3339, toStr)
 	if err != nil {
-		return nil, errors.New("invalid to")
+		return nil, apperr.NewValidation("invalid to")
 	}
 
 	if !to.After(from) {
-		return nil, errors.New("`to` must be after `from`")
+		return nil, apperr.NewValidation("`to` must be after `from`")
 	}
 
 	limit := 500
 	if limitStr != "" {
 		v, err := strconv.Atoi(limitStr)
 		if err != nil || v <= 0 || v > 5000 {
-			return nil, errors.New("limit must be in range [1..5000]")
+			return nil, apperr.NewValidation("limit must be in range [1..5000]")
 		}
 		limit = v
 	}
@@ -115,24 +115,24 @@ func (s *measurementService) List(ctx context.Context, deviceID, fromStr, toStr,
 
 func validateAndParse(in model.MeasurementIn) (time.Time, error) {
 	if in.DeviceID == "" {
-		return time.Time{}, errors.New("deviceId is required")
+		return time.Time{}, apperr.NewValidation("deviceId is required")
 	}
 
 	if in.Timestamp == "" {
-		return time.Time{}, errors.New("timestamp is required (RFC3339)")
+		return time.Time{}, apperr.NewValidation("timestamp is required (RFC3339)")
 	}
 
 	ts, err := time.Parse(time.RFC3339, in.Timestamp)
 	if err != nil {
-		return time.Time{}, errors.New("timestamp must be RFC3339, example: 2026-02-10T10:00:00Z")
+		return time.Time{}, apperr.NewValidation("timestamp must be RFC3339, example: 2026-02-10T10:00:00Z")
 	}
 
 	if in.PH != nil && (*in.PH < 0 || *in.PH > 14) {
-		return time.Time{}, errors.New("ph must be in range [0..14]")
+		return time.Time{}, apperr.NewValidation("ph must be in range [0..14]")
 	}
 
 	if in.Temperature != nil && (*in.Temperature < -50 || *in.Temperature > 80) {
-		return time.Time{}, errors.New("temperature must be in range [-50..80]")
+		return time.Time{}, apperr.NewValidation("temperature must be in range [-50..80]")
 	}
 
 	return ts, nil
